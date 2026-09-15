@@ -1,0 +1,9 @@
+# Runtime deps for the Docker image. torch/torchvision come from the base image on purpose.
+# iopaint pins fastapi==0.108.0 and Pillow==9.5.0; leave those unpinned here so pip can satisfy it.
+iopaint==1.6.0
+easyocr==1.7.2
+fastapi
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+pillow
+numpy

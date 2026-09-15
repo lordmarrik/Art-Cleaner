@@ -1,0 +1,8 @@
+# CPU-only test deps. No torch, no iopaint, no easyocr.
+fastapi>=0.115
+httpx
+python-multipart>=0.0.9
+pillow>=10
+numpy
+pytest
+pyyaml

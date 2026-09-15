@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Art-Cleaner</title>
+<style>
+  :root { --bg:#111; --card:#1c1c1e; --fg:#f2f2f2; --muted:#9a9a9a; --accent:#4f8cff; --ok:#2ecc71; --bad:#ff5b5b; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.4 -apple-system,system-ui,Segoe UI,Roboto,sans-serif; }
+  main { max-width:640px; margin:0 auto; padding:16px; }
+  h1 { font-size:22px; margin:8px 0 4px; }
+  .sub { color:var(--muted); font-size:14px; margin-bottom:16px; }
+  .card { background:var(--card); border-radius:14px; padding:16px; margin-bottom:14px; }
+  label { display:block; margin:10px 0 4px; font-weight:600; }
+  input[type=text], input[type=number], input[type=file] { width:100%; padding:12px; border-radius:10px; border:1px solid #333; background:#0f0f10; color:var(--fg); font-size:16px; }
+  .row { display:flex; gap:8px; }
+  .row > * { flex:1; }
+  .check { display:flex; align-items:center; gap:10px; padding:10px 0; font-weight:600; }
+  .check input { width:24px; height:24px; }
+  button { width:100%; padding:16px; border:0; border-radius:12px; background:var(--accent); color:#fff; font-size:17px; font-weight:700; margin-top:10px; }
+  button.secondary { background:#2c2c2e; }
+  button.ok { background:var(--ok); color:#062; }
+  button:disabled { opacity:.45; }
+  .hint { color:var(--muted); font-size:13px; }
+  #bar { height:10px; background:#2a2a2a; border-radius:6px; overflow:hidden; margin-top:8px; }
+  #bar > div { height:100%; width:0; background:var(--accent); transition:width .3s; }
+  #stage { margin-top:6px; font-weight:600; }
+  #err { color:var(--bad); white-space:pre-wrap; }
+  .grid { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-top:10px; }
+  .grid img { width:100%; border-radius:8px; background:#000; }
+  .banner { background:#3a2e00; color:#ffd866; padding:10px 12px; border-radius:10px; font-size:14px; margin-bottom:12px; display:none; }
+  ul.jobs { list-style:none; padding:0; margin:0; }
+  ul.jobs li { padding:10px 0; border-bottom:1px solid #2a2a2a; display:flex; justify-content:space-between; gap:8px; align-items:center; }
+  ul.jobs button { width:auto; padding:8px 12px; margin:0; font-size:14px; }
+  a { color:var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Art-Cleaner</h1>
+  <div class="sub">Remove text and watermarks from your own art. Preview first, then clean.</div>
+  <div class="banner" id="warm">Engine is still warming up (first start downloads models). You can upload now; cleaning will wait for it.</div>
+
+  <div class="card">
+    <label>1. Pick your images</label>
+    <input type="file" id="files" accept=".zip,image/*" multiple>
+    <div class="hint">A zip is easiest. Or pick several images.</div>
+    <label>…or a folder already on the pod</label>
+    <input type="text" id="source_path" placeholder="/workspace/my-art">
+  </div>
+
+  <div class="card">
+    <label>2. What to remove</label>
+    <div class="check"><input type="checkbox" id="auto_text" checked> Find text automatically</div>
+    <div class="check"><input type="checkbox" id="rect"> Fixed spot (same place on every image)</div>
+    <div id="rectbox" style="display:none">
+      <div class="hint">Numbers are % of the image. Default = bottom-right corner.</div>
+      <div class="row">
+        <div><label>Left %</label><input type="number" id="rect_x" value="70" min="0" max="100"></div>
+        <div><label>Top %</label><input type="number" id="rect_y" value="90" min="0" max="100"></div>
+      </div>
+      <div class="row">
+        <div><label>Width %</label><input type="number" id="rect_w" value="30" min="1" max="100"></div>
+        <div><label>Height %</label><input type="number" id="rect_h" value="10" min="1" max="100"></div>
+      </div>
+    </div>
+    <label>Safety margin around marks (px)</label>
+    <input type="number" id="dilate_px" value="8" min="0" max="64">
+    <div class="hint">Bigger = cleaner fill, but touches more of the art. 6 to 12 is usual.</div>
+  </div>
+
+  <div class="card">
+    <button id="btnPreview">Preview masks</button>
+    <button id="btnClean" class="ok">Clean images</button>
+    <div class="hint">Preview shows in red what will be removed. Nothing is changed until you press Clean.</div>
+  </div>
+
+  <div class="card" id="progress" style="display:none">
+    <div id="stage">Starting…</div>
+    <div id="bar"><div></div></div>
+    <div id="err"></div>
+    <div id="emptyNote" class="hint"></div>
+    <div class="grid" id="grid"></div>
+    <button id="btnRunClean" class="ok" style="display:none">Clean with these masks</button>
+    <a id="dl" style="display:none"><button class="ok">Download cleaned zip</button></a>
+  </div>
+
+  <div class="card">
+    <label>Manual touch-ups</label>
+    <div class="hint">For anything the auto pass missed: open the brush editor, load an image, paint over the mark.</div>
+    <a id="iopaint" target="_blank"><button class="secondary">Open brush editor</button></a>
+  </div>
+
+  <div class="card">
+    <label>Recent jobs</label>
+    <ul class="jobs" id="jobs"></ul>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let current = null, timer = null;
+
+// IOPaint runs on port 8080. On RunPod the host looks like <podid>-8000.proxy.runpod.net
+(function(){
+  const h = location.host;
+  let url;
+  if (/-8000\./.test(h)) url = location.protocol + '//' + h.replace('-8000.', '-8080.');
+  else url = location.protocol + '//' + location.hostname + ':8080';
+  $('iopaint').href = url;
+})();
+
+$('rect').onchange = () => $('rectbox').style.display = $('rect').checked ? 'block' : 'none';
+
+function params() {
+  return {
+    auto_text: $('auto_text').checked, rect: $('rect').checked,
+    rect_x: $('rect_x').value, rect_y: $('rect_y').value, rect_w: $('rect_w').value, rect_h: $('rect_h').value,
+    dilate_px: $('dilate_px').value
+  };
+}
+
+async function submit(action) {
+  const fd = new FormData();
+  for (const f of $('files').files) fd.append('files', f);
+  if ($('source_path').value.trim()) fd.append('source_path', $('source_path').value.trim());
+  const p = params();
+  for (const k in p) fd.append(k, p[k]);
+  fd.append('action', action);
+  setBusy(true);
+  showProgress('Uploading…', 0);
+  try {
+    const r = await fetch('/jobs', { method:'POST', body: fd });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail || r.statusText);
+    watch(j.job_id);
+  } catch (e) { fail(e.message); }
+}
+
+async function rerun(action) {
+  if (!current) return;
+  setBusy(true);
+  try {
+    const r = await fetch(`/jobs/${current}/run`, { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ action, params: params() }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail || r.statusText);
+    watch(current);
+  } catch (e) { fail(e.message); }
+}
+
+function setBusy(b) { $('btnPreview').disabled = b; $('btnClean').disabled = b; $('btnRunClean').disabled = b; }
+function showProgress(text, pct) { $('progress').style.display = 'block'; $('stage').textContent = text; $('bar').firstElementChild.style.width = pct + '%'; }
+function fail(msg) { setBusy(false); showProgress('Error', 0); $('err').textContent = msg; }
+
+function watch(id) {
+  current = id; $('err').textContent = ''; $('grid').innerHTML = ''; $('dl').style.display = 'none'; $('btnRunClean').style.display = 'none';
+  clearInterval(timer);
+  timer = setInterval(async () => {
+    const r = await fetch(`/jobs/${id}`); if (!r.ok) return;
+    const s = await r.json();
+    const pct = s.total ? Math.round(100 * (s.done_count || 0) / s.total) : 0;
+    showProgress(s.stage || s.state, pct);
+    if (s.previews && !$('grid').childElementCount) {
+      for (const u of s.previews) { const img = document.createElement('img'); img.loading = 'lazy'; img.src = u + '?t=' + Date.now(); $('grid').appendChild(img); }
+    }
+    if (s.state === 'done' || s.state === 'error') {
+      clearInterval(timer); setBusy(false);
+      if (s.error) $('err').textContent = s.error;
+      const e = s.empty_mask_files || [];
+      $('emptyNote').textContent = e.length ? `Nothing found on ${e.length} image(s), passed through unchanged: ${e.slice(0,8).join(', ')}${e.length>8?'…':''}` : '';
+      if (s.state === 'done' && s.action === 'preview') $('btnRunClean').style.display = 'block';
+      if (s.state === 'done' && s.download_url) { $('dl').href = s.download_url; $('dl').style.display = 'block'; }
+      loadJobs();
+    }
+  }, 1500);
+}
+
+async function loadJobs() {
+  const r = await fetch('/jobs'); const list = await r.json();
+  $('jobs').innerHTML = '';
+  for (const j of list.slice(0, 10)) {
+    const li = document.createElement('li');
+    li.innerHTML = `<span>${j.job_id}<br><span class="hint">${j.action || ''} · ${j.state || ''}</span></span>`;
+    const b = document.createElement('button'); b.className = 'secondary'; b.textContent = 'Open';
+    b.onclick = () => watch(j.job_id);
+    const d = document.createElement('button'); d.className = 'secondary'; d.textContent = '✕';
+    d.onclick = async () => { if (confirm('Delete this job and its files?')) { await fetch(`/jobs/${j.job_id}`, {method:'DELETE'}); loadJobs(); } };
+    li.append(b, d); $('jobs').appendChild(li);
+  }
+}
+
+async function health() {
+  try { const r = await fetch('/health'); const h = await r.json(); $('warm').style.display = h.iopaint_ui_up ? 'none' : 'block'; } catch {}
+}
+
+$('btnPreview').onclick = () => submit('preview');
+$('btnClean').onclick = () => submit('clean');
+$('btnRunClean').onclick = () => rerun('clean');
+loadJobs(); health(); setInterval(health, 10000);
+</script>
+</body>
+</html>
