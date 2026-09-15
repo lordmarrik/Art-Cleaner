@@ -41,8 +41,8 @@ jobs:
           push: true
           provenance: false
           tags: |
-            ghcr.io/lordmarrik/art-cleaner:latest
-            ghcr.io/lordmarrik/art-cleaner:${{ github.sha }}
+            ghcr.io/lordmarrik/art-cleaner-runpod:latest
+            ghcr.io/lordmarrik/art-cleaner-runpod:${{ github.sha }}
 
       - name: Smoke test (app imports inside the image)
-        run: docker run --rm ghcr.io/lordmarrik/art-cleaner:latest python -c "import app.main; print('app imports ok')"
+        run: docker run --rm ghcr.io/lordmarrik/art-cleaner-runpod:latest python -c "import app.main; print('app imports ok')"

@@ -18,7 +18,7 @@ a phone: keep replies short, do the work, don't hand them commands.
 - `Dockerfile` — `pytorch/pytorch` CUDA runtime base + `requirements.txt`.
   torch/torchvision are deliberately NOT in requirements.txt.
 - `.github/workflows/build-image.yml` builds and pushes
-  `ghcr.io/lordmarrik/art-cleaner:latest` on pushes to the default
+  `ghcr.io/lordmarrik/art-cleaner-runpod:latest` on pushes to the default
   branch that touch the app, Dockerfile, start script or requirements.
 
 ## Data layout on the pod
@@ -43,3 +43,8 @@ real pod; the README's first-run steps are that checklist.
 - Masks are white-on-black PNGs named `<image stem>.png` (IOPaint matches by stem).
 - Preview and Clean must use the same `build_mask()`.
 - Deploy = push to the default branch. Don't bake models into the image.
+- The image is named `art-cleaner-runpod` on purpose: a package called
+  `art-cleaner` already exists on the account, linked to another repo, and
+  this repo's workflow token cannot write to it (build failed with
+  `permission_denied: read_package`). A fresh package name linked to this
+  public repo is created public and needs no manual settings.

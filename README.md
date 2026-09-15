@@ -22,9 +22,9 @@ automatic pass missed. Paint over the mark with your finger, tap, done.
 ### A. Make the image pullable
 
 The Docker image is built automatically by GitHub Actions and stored at
-`ghcr.io/lordmarrik/art-cleaner:latest`. Because this repo is public, the
+`ghcr.io/lordmarrik/art-cleaner-runpod:latest`. Because this repo is public, the
 package normally comes out public too. Check once: on GitHub, open your
-profile → **Packages** → **art-cleaner**. If it says **Private**, either:
+profile → **Packages** → **art-cleaner-runpod**. If it says **Private**, either:
 
 - **Easiest:** **Package settings** → **Change visibility** → **Public**.
   One time only.
@@ -38,7 +38,7 @@ RunPod → **Templates → New Template**:
 
 | Field | Value |
 |---|---|
-| Container image | `ghcr.io/lordmarrik/art-cleaner:latest` |
+| Container image | `ghcr.io/lordmarrik/art-cleaner-runpod:latest` |
 | Container disk | 20 GB |
 | Volume disk | 20 GB |
 | Volume mount path | `/workspace` |
