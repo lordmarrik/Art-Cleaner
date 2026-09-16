@@ -1,6 +1,9 @@
 # Art-Cleaner: LaMa inpainting + EasyOCR text detection, phone-first web UI, for RunPod GPU pods.
 # Base image already contains Python, torch, torchvision and the CUDA runtime.
-FROM pytorch/pytorch:2.5.1-cuda12.1-cudnn9-runtime
+# CUDA 12.8 build: its torch ships kernels for every current RunPod GPU, including
+# RTX 50-series / Blackwell (sm_120). The older cuda12.1 tag failed on those with
+# "CUDA error: no kernel image is available for execution on the device".
+FROM pytorch/pytorch:2.8.0-cuda12.8-cudnn9-runtime
 
 ENV PIP_NO_CACHE_DIR=1 \
     PYTHONUNBUFFERED=1 \
