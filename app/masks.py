@@ -16,6 +16,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 MAX_DILATE = 64
+MAX_MERGE = 128
 Point = tuple[float, float]
 
 
@@ -27,7 +28,9 @@ class Params:
     rect_y: float = 90.0
     rect_w: float = 30.0
     rect_h: float = 10.0
-    dilate_px: int = 8
+    dilate_px: int = 12
+    merge_px: int = 32  # join text boxes closer than ~2x this into one block
+    band: bool = False  # stretch each text block across the full image width
 
     def validate(self) -> None:
         if not (self.auto_text or self.rect):
@@ -36,6 +39,8 @@ class Params:
             rect_pct_to_px(100, 100, self.rect_x, self.rect_y, self.rect_w, self.rect_h)
         if not (0 <= int(self.dilate_px) <= MAX_DILATE):
             raise ValueError(f"dilate_px must be between 0 and {MAX_DILATE}.")
+        if not (0 <= int(self.merge_px) <= MAX_MERGE):
+            raise ValueError(f"merge_px must be between 0 and {MAX_MERGE}.")
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -51,7 +56,9 @@ class Params:
             rect_y=float(d.get("rect_y", 90)),
             rect_w=float(d.get("rect_w", 30)),
             rect_h=float(d.get("rect_h", 10)),
-            dilate_px=int(float(d.get("dilate_px", 8))),
+            dilate_px=int(float(d.get("dilate_px", 12))),
+            merge_px=int(float(d.get("merge_px", 32))),
+            band=b(d.get("band", False)),
         )
 
 
@@ -113,17 +120,51 @@ def dilate(mask: np.ndarray, n_px: int) -> np.ndarray:
     return np.array(img, dtype=np.uint8)
 
 
+def close_gaps(mask: np.ndarray, n_px: int) -> np.ndarray:
+    """Morphological closing: grow by n, then shrink by n.
+
+    Separate text lines closer than about 2*n px fuse into one block, which also
+    swallows whatever sits between them (divider ornaments, the panel behind a
+    caption) so the inpainter fills one coherent region instead of stripes.
+    """
+    n = int(n_px)
+    if n <= 0 or is_empty(mask):
+        return mask.copy()
+    k = 2 * n + 1
+    # Pad with black first: Pillow's filters replicate edges, so a region that
+    # grows into the border would otherwise never shrink back.
+    padded = np.pad(mask, n, mode="constant", constant_values=0)
+    img = Image.fromarray(padded, mode="L").filter(ImageFilter.MaxFilter(k)).filter(ImageFilter.MinFilter(k))
+    return np.array(img, dtype=np.uint8)[n:-n, n:-n]
+
+
+def full_width_bands(mask: np.ndarray) -> np.ndarray:
+    """Every row that contains any mask becomes fully masked.
+
+    Captions, name plates and divider ornaments in game/UI screenshots usually
+    span the width around the text; this removes the whole strip.
+    """
+    out = np.zeros_like(mask)
+    rows = mask.any(axis=1)
+    out[rows, :] = 255
+    return out
+
+
 def is_empty(mask: np.ndarray) -> bool:
     return not bool(mask.any())
 
 
 def build_mask(size: tuple[int, int], params: Params,
                text_polygons: Sequence[Sequence[Point]] | None = None) -> np.ndarray:
-    """final = dilate(union(auto_mask, rect_mask), dilate_px)."""
+    """auto = close_gaps(text, merge_px); optionally full_width_bands(auto);
+    final = dilate(union(auto, rect_mask), dilate_px)."""
     w, h = size
     parts = []
     if params.auto_text:
-        parts.append(polygons_to_mask(size, text_polygons or []))
+        auto = close_gaps(polygons_to_mask(size, text_polygons or []), params.merge_px)
+        if params.band:
+            auto = full_width_bands(auto)
+        parts.append(auto)
     if params.rect:
         box = rect_pct_to_px(w, h, params.rect_x, params.rect_y, params.rect_w, params.rect_h)
         parts.append(rect_mask(size, [box]))

@@ -42,7 +42,8 @@ def health():
 def _params_from_form(form) -> Params:
     if not hasattr(form, "get"):
         raise HTTPException(422, "params must be an object")
-    raw = {k: form.get(k) for k in ("auto_text", "rect", "rect_x", "rect_y", "rect_w", "rect_h", "dilate_px")
+    raw = {k: form.get(k) for k in ("auto_text", "rect", "rect_x", "rect_y", "rect_w", "rect_h",
+                                     "dilate_px", "merge_px", "band")
            if form.get(k) not in (None, "")}
     try:
         p = Params.from_dict(raw)

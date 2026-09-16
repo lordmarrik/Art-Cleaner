@@ -100,3 +100,41 @@ def test_overlay_downscales():
     r, g, b = ov.getpixel((5, 5))
     assert r > 100  # reddish where masked
     assert ov.getpixel((500, 250)) == (0, 255, 0)
+
+
+def test_close_gaps_fuses_nearby_lines_only():
+    from app.masks import close_gaps
+    m = np.zeros((200, 100), dtype=np.uint8)
+    m[20:40, 10:90] = 255   # "title"
+    m[70:90, 10:90] = 255   # "description", 30 px gap
+    fused = close_gaps(m, 20)          # reach ~40 px > 30 px gap
+    assert fused[55, 50] == 255        # gap filled
+    assert fused[20, 50] == 255 and fused[89, 50] == 255  # originals intact
+    assert fused[10, 50] == 0 and fused[150, 50] == 0     # nothing grows outward
+    kept = close_gaps(m, 10)           # reach ~20 px < 30 px gap
+    assert kept[55, 50] == 0
+    assert np.array_equal(close_gaps(m, 0), m)
+
+
+def test_build_mask_uses_merge_then_dilate():
+    polys = [[(10, 20), (90, 20), (90, 40), (10, 40)], [(10, 70), (90, 70), (90, 90), (10, 90)]]
+    merged = build_mask((100, 200), Params(auto_text=True, merge_px=20, dilate_px=0), polys)
+    assert merged[55, 50] == 255
+    unmerged = build_mask((100, 200), Params(auto_text=True, merge_px=0, dilate_px=0), polys)
+    assert unmerged[55, 50] == 0
+    with pytest.raises(ValueError):
+        Params(merge_px=999).validate()
+    assert Params.from_dict({"merge_px": "16.0"}).merge_px == 16
+
+
+def test_full_width_band_mode():
+    from app.masks import full_width_bands
+    m = np.zeros((50, 100), dtype=np.uint8)
+    m[10:20, 40:60] = 255
+    b = full_width_bands(m)
+    assert b[15, 0] == 255 and b[15, 99] == 255 and b[9, 50] == 0 and b[20, 50] == 0
+    polys = [[(40, 10), (60, 10), (60, 20), (40, 20)]]
+    on = build_mask((100, 50), Params(auto_text=True, band=True, merge_px=0, dilate_px=0), polys)
+    off = build_mask((100, 50), Params(auto_text=True, band=False, merge_px=0, dilate_px=0), polys)
+    assert on[15, 2] == 255 and off[15, 2] == 0
+    assert Params.from_dict({"band": "true"}).band is True

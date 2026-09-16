@@ -65,9 +65,14 @@
         <div><label>Height %</label><input type="number" id="rect_h" value="10" min="1" max="100"></div>
       </div>
     </div>
+    <div class="check"><input type="checkbox" id="band"> Wipe the whole strip a text block sits on</div>
+    <div class="hint">For captions, name plates and divider lines that stretch wider than the text (game/UI screenshots). Leave off for small signatures.</div>
+    <label>Join nearby text into one block (px)</label>
+    <input type="number" id="merge_px" value="32" min="0" max="128">
+    <div class="hint">Lines of text closer than about twice this get fused, taking the panel or divider between them too. 0 = off.</div>
     <label>Safety margin around marks (px)</label>
-    <input type="number" id="dilate_px" value="8" min="0" max="64">
-    <div class="hint">Bigger = cleaner fill, but touches more of the art. 6 to 12 is usual.</div>
+    <input type="number" id="dilate_px" value="12" min="0" max="64">
+    <div class="hint">Bigger = cleaner fill, but touches more of the art. 8 to 20 is usual.</div>
   </div>
 
   <div class="card">
@@ -117,7 +122,7 @@ function params() {
   return {
     auto_text: $('auto_text').checked, rect: $('rect').checked,
     rect_x: $('rect_x').value, rect_y: $('rect_y').value, rect_w: $('rect_w').value, rect_h: $('rect_h').value,
-    dilate_px: $('dilate_px').value
+    dilate_px: $('dilate_px').value, merge_px: $('merge_px').value, band: $('band').checked
   };
 }
 
